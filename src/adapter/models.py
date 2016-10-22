@@ -81,10 +81,15 @@ class UserAccount(models.Model):
     admin_account = models.ForeignKey('adapter.AdminAccount')
     metadata = JSONField(null=True, blank=True, default={})
 
-    def get_account_id(self, user_id):
-        interface = Interface(account=self)
-        interface.get_user_account_id(user_id=self.rehive_id)
+    def save(self, *args, **kwargs):
+        if not self.id:  # On create
+            logger.info('Fetching account_id.')
+            self.account_id = self._new_account_id()
+        return super(UserAccount, self).save(*args, **kwargs)
 
+    def _new_account_id(self):
+        interface = Interface(account=self)
+        return interface.get_user_account_id(user_id=self.rehive_id)
 
 # HotWallet/ Operational Accounts for sending or receiving on behalf of users.
 # Admin accounts usually have a secret key to authenticate with third-party provider (or XPUB for key generation).
@@ -104,13 +109,17 @@ class AdminAccount(models.Model):
         interface.send(tx)
         return True
 
-    #
+    # Return account id (e.g. Bitcoin address)
     def get_account_id(self) -> str:
         """
         Returns third party identifier of Admin account. E.g. Bitcoin address.
         """
         interface = Interface(account=self)
-        interface.get_account_id(account=self)
+        return interface.get_account_id()
+
+    def get_balance(self) -> int:
+        interface = Interface(account=self)
+        return interface.get_balance()
 
 
 class ReceiveWebhook(models.Model):

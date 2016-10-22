@@ -33,10 +33,13 @@ TASK_QUEUE = os.environ.get('TASK_QUEUE', '') in ['True', True, 'true']
 
 # secrets
 SECRET_KEY = os.environ.get('DJANGO_SECRET', 'dvznxtu08$$a9jxjh=jkkswbe5-dw5+ea%4k((1k69ooi7d(hj')
-AWS_ACCESS_KEY_ID = os.environ.get('AWS_ACCESS_KEY_ID', '')
-AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY', '')
 
-TWILIO_ACCOUNT_SID = os.environ.get('TWILIO_ACCOUNT_SID', '')
-TWILIO_AUTH_TOKEN = os.environ.get('TWILIO_AUTH_TOKEN', '')
-TWILIO_TWIML_APP_SID = os.environ.get('TWILIO_TWIML_APP_SID', '')
-TWILIO_CALLER_ID = os.environ.get('TWILIO_CALLER_ID', '')
+# Get the platform URL for the adapter (Rehive)
+REHIVE_API_URL = os.environ.get('REHIVE_API_URL', '')
+
+# Get the admin token for platform requests (Rehive)
+REHIVE_API_TOKEN = os.environ.get('REHIVE_API_TOKEN', '')
+
+# TODO: Replace this with user accounts and tokens.
+ADAPTER_SECRET_KEY = os.environ.get('ADAPTER_TOKEN', 'secret')
+BLOCKCYPHER_TOKEN = os.environ.get('BLOCKCYPHER_TOKEN', '')

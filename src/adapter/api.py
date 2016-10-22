@@ -79,6 +79,13 @@ class Interface(AbstractBaseInteface):
         else:
             raise NotImplementedError('Account does not have valid MPK')
 
+    def get_account_id(self):
+        # TODO: switch to compressed address
+        privkey = self._get_private_key()
+        pubkey = bitcoin.privkey_to_pubkey(privkey)
+        address = bitcoin.pubtoaddr(pubkey)
+        return address
+
     def send(self, tx):
         logger.info('Creating bitcoin send transaction...')
 

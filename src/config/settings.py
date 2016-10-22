@@ -20,7 +20,6 @@ from .plugins.database import *
 from .plugins.tasks import *
 from .plugins.authentication import *
 
-
 # LOGGING
 # ---------------------------------------------------------------------------------------------------------------------#
 logger = getLogger('django')

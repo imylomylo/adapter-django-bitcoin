@@ -17,8 +17,5 @@ class AdminAccountAdmin(CustomModelAdmin):
     pass
 
 
-class AssetAdmin(CustomModelAdmin):
-    pass
-
 admin.site.register(UserAccount, UserAccountAdmin)
 admin.site.register(AdminAccount, AdminAccountAdmin)
