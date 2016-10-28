@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import UserAccount, AdminAccount
+from .models import UserAccount, AdminAccount, ReceiveWebhook, ReceiveTransaction
 
 
 class CustomModelAdmin(admin.ModelAdmin):
@@ -17,5 +17,14 @@ class AdminAccountAdmin(CustomModelAdmin):
     pass
 
 
+class ReceiveWebhookAdmin(CustomModelAdmin):
+    pass
+
+
+class ReceiveTransactionAdmin(CustomModelAdmin):
+    pass
+
+admin.site.register(ReceiveTransaction, ReceiveTransactionAdmin)
 admin.site.register(UserAccount, UserAccountAdmin)
 admin.site.register(AdminAccount, AdminAccountAdmin)
+admin.site.register(ReceiveWebhook, ReceiveWebhookAdmin)

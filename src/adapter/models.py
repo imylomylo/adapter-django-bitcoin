@@ -88,8 +88,9 @@ class UserAccount(models.Model):
         return super(UserAccount, self).save(*args, **kwargs)
 
     def _new_account_id(self):
-        interface = Interface(account=self)
+        interface = Interface(account=self.admin_account)
         return interface.get_user_account_id(user_id=self.rehive_id)
+
 
 # HotWallet/ Operational Accounts for sending or receiving on behalf of users.
 # Admin accounts usually have a secret key to authenticate with third-party provider (or XPUB for key generation).
@@ -125,5 +126,5 @@ class AdminAccount(models.Model):
 class ReceiveWebhook(models.Model):
     webhook_type = models.CharField(max_length=50, null=True, blank=True)
     webhook_id = models.CharField(max_length=50, null=True, blank=True)
-    receive_transaction = models.ForeignKey(ReceiveTransaction)
+    receive_transaction = models.ForeignKey(UserAccount)
     callback_url = models.CharField(max_length=150, blank=False)

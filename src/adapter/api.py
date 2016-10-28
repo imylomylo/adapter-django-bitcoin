@@ -2,11 +2,13 @@ from logging import getLogger
 
 import requests
 from django.conf import settings
+
+from src.adapter.models import UserAccount
 from .utils import to_cents
 
 logger = getLogger('django')
 import bitcoin, blockcypher
-from urllib.parse import urlparse, urlencode
+from urllib.parse import urlparse, urlencode, urljoin
 
 
 class AbstractBaseInteface:
@@ -73,7 +75,12 @@ class Interface(AbstractBaseInteface):
             idx = self.account.secret.get('current_index')
             pubkey = bitcoin.electrum_pubkey(mpk, idx)
             address = bitcoin.pubtoaddr(pubkey)
-            self.account.secret.current_index += 1
+
+            if 'current_index' in self.account.secret:
+                self.account.secret['current_index'] += 1
+            else:
+                self.account.secret['current_index'] = 0
+
             self.account.save()
             return address
         else:
@@ -173,10 +180,10 @@ class Interface(AbstractBaseInteface):
         return blockcypher.get_total_balance(self.get_account_id(), api_key=api_key)
 
 
-class AbstractWebhookInterfaceBase:
-    def __init__(self, tx):
-        # Initialize with transaction
-        self.tx = tx
+class AbstractReceiveWebhookInterfaceBase:
+    def __init__(self, account):
+        # Always linked to an AdminAccount
+        self.account = account
 
     def subscribe_to_all(self):
         raise NotImplementedError('subclasses of AbstractBaseUser must provide a get_account_id() method')
@@ -185,14 +192,18 @@ class AbstractWebhookInterfaceBase:
         raise NotImplementedError('subclasses of AbstractBaseUser must provide a get_account_id() method')
 
 
-class WebhookInterface(AbstractWebhookInterfaceBase):
-    def _subscribe_bc_unconfirmed(self):
-        from .models import ReceiveWebhook
+BASE_URL = 'http://requestb.in/ueftzyue'
 
+
+class WebhookReceiveInterface(AbstractReceiveWebhookInterfaceBase):
+    def blockcypher_receive_unconfirmed(self):
+        from .models import ReceiveWebhook
         api_key = settings.BLOCKCYPHER_TOKEN
-        # TODO: Remove hardcoded SITE_URL
-        base_url = 'https://app.zapgo.co/hooks/unconfirmed/'
-        params = {'id': self.tx.id}
+        # base_url = urljoin(BASE_URL, 'unconfirmed')
+        base_url = BASE_URL
+
+        # ID is used to keep track of user or tx for which transactions are being monitored:
+        params = {'id': self.account.id}
         callback_url = base_url + ('&', '?')[urlparse(base_url).query == ''] + urlencode(params)
 
         url = 'https://api.blockcypher.com/v1/btc/main/hooks'
@@ -202,42 +213,51 @@ class WebhookInterface(AbstractWebhookInterfaceBase):
 
         data = {'event': 'unconfirmed-tx',
                 'url': callback_url,
-                'address': self.tx.recipient,
+                'address': self.account.account_id,
                 'token': api_key}
 
         res = requests.post(url, params=params, json=data, verify=True)
         webhook_id = res.json()['id']
 
-        ReceiveWebhook.objects.create(receive_transaction=self.tx,
+        ReceiveWebhook.objects.create(receive_user=self.account,
                                       webhook_type='unconfirmed-tx',
                                       webhook_id=webhook_id,
                                       callback_url=callback_url)
 
-    def _subscribe_bc_confirmations(self):
-        from .models import ReceiveWebhook
-        api_key = settings.BLOCKCYPHER_TOKEN
-        # TODO: Remove hard coded SITE_URL:
-        base_url = 'https://app.zapgo.co/hooks/confirmations/'
-        params = {'id': self.tx.id}
-        callback_url = base_url + ('&', '?')[urlparse(base_url).query == ''] + urlencode(params)
-
-        webhook_id = blockcypher.subscribe_to_address_webhook(callback_url=callback_url,
-                                                              subscription_address=self.tx.recipient,
-                                                              event='tx-confirmation',
-                                                              coin_symbol='btc',
-                                                              api_key=api_key)
-
-        ReceiveWebhook.objects.create(receive_transaction=self.tx,
-                                      webhook_type='tx-confirmation',
-                                      webhook_id=webhook_id,
-                                      callback_url=callback_url)
-
-    def _subscribe_bc_confidence(self, confidence_factor: float = 0.99):
+    def blockcypher_receive_confirmed(self):
         from .models import ReceiveWebhook
         api_key = settings.BLOCKCYPHER_TOKEN
         # TODO: Remove hardcoded SITE_URL
-        base_url = 'https://app.zapgo.co/hooks/confidence/'
-        params = {'id': self.tx.id}
+        # base_url = urljoin(BASE_URL, 'unconfirmed')
+        base_url = BASE_URL
+        params = {'id': self.account.id}
+        callback_url = base_url + ('&', '?')[urlparse(base_url).query == ''] + urlencode(params)
+
+        url = 'https://api.blockcypher.com/v1/btc/main/hooks'
+        params = {
+            'includedConfidence': True
+        }
+
+        data = {'event': 'unconfirmed-tx',
+                'url': callback_url,
+                'address': self.account.account_id,
+                'token': api_key}
+
+        res = requests.post(url, params=params, json=data, verify=True)
+        webhook_id = res.json()['id']
+
+        ReceiveWebhook.objects.create(receive_use=self.account,
+                                      webhook_type='unconfirmed-tx',
+                                      webhook_id=webhook_id,
+                                      callback_url=callback_url)
+
+    def blockcypher_receive_confidence(self, confidence_factor: float = 0.99):
+        from .models import ReceiveWebhook
+        api_key = settings.BLOCKCYPHER_TOKEN
+        # TODO: Remove hardcoded SITE_URL
+        # base_url = urljoin(BASE_URL, 'confirmations')
+        base_url = BASE_URL
+        params = {'id': self.account}
         callback_url = base_url + ('&', '?')[urlparse(base_url).query == ''] + urlencode(params)
 
         url = 'https://api.blockcypher.com/v1/btc/main/hooks'
@@ -245,7 +265,7 @@ class WebhookInterface(AbstractWebhookInterfaceBase):
         data = {'event': 'tx-confidence',
                 'confidence': confidence_factor,
                 'url': callback_url,
-                'address': self.tx.recipient,
+                'address': self.account.account_id,
                 'token': api_key}
 
         res = requests.post(url, json=data, verify=True)
@@ -253,13 +273,13 @@ class WebhookInterface(AbstractWebhookInterfaceBase):
         logger.info(res.json())
         logger.info(webhook_id)
 
-        ReceiveWebhook.objects.create(receive_transaction=self.tx,
+        ReceiveWebhook.objects.create(receive_user=self.account,
                                       webhook_type='tx-confidence',
                                       webhook_id=webhook_id,
                                       callback_url=callback_url)
 
-    def _unsubscribe_bc(self, webhook_type: str):
-        webhook_set = self.tx.receivewebhook_set
+    def unsubscribe_blockcypher(self, webhook_type: str):
+        webhook_set = self.account.receivewebhook_set
         selected_hooks = webhook_set.filter(webhook_type=webhook_type)
 
         for hook in selected_hooks:
@@ -268,15 +288,12 @@ class WebhookInterface(AbstractWebhookInterfaceBase):
             url = 'https://api.blockcypher.com/v1/btc/main/hooks/' + hook.webhook_id
             params = {'token': settings.BLOCKCYPHER_TOKEN}
             res = requests.delete(url=url, params=params, verify=True)
-
-            # blockcypher.unsubscribe_from_webhook(webhook_id=str(hook.webhook_id),
-            #                                      api_key=settings.BLOCKCYPHER_TOKEN,
-            #                                      coin_symbol='btc')
+            return res
 
     def subscribe_to_all(self):
-        self._subscribe_bc_unconfirmed()
-        self._subscribe_bc_confidence()
+        self.blockcypher_receive_unconfirmed()
+        self.blockcypher_receive_confidence()
 
     def unsubscribe_from_all(self):
-        self._unsubscribe_bc('unconfirmed-tx')
-        self._unsubscribe_bc('tx-confidence')
+        self.unsubscribe_blockcypher('unconfirmed-tx')
+        self.unsubscribe_blockcypher('tx-confidence')
