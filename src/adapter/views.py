@@ -1,3 +1,4 @@
+import urllib.parse
 from collections import OrderedDict
 
 from rest_framework.decorators import api_view, permission_classes, authentication_classes
@@ -7,9 +8,11 @@ from rest_framework.response import Response
 from rest_framework import exceptions
 from rest_framework.generics import GenericAPIView
 from rest_framework.reverse import reverse
+from rest_framework.status import HTTP_200_OK, HTTP_404_NOT_FOUND
 from rest_framework.views import APIView
 
-from src.adapter.utils import from_cents, create_qr_code_url, input_to_json
+from .tasks import process_webhook_receive
+from .utils import from_cents, create_qr_code_url, input_to_json
 from .api import Interface
 from .models import UserAccount, AdminAccount, SendTransaction
 from .permissions import AdapterGlobalPermission
@@ -110,18 +113,18 @@ class SendView(GenericAPIView):
     allowed_methods = ('POST',)
     throttle_classes = (NoThrottling,)
     serializer_class = TransactionSerializer
+    authentication_classes = []
     permission_classes = (AdapterGlobalPermission,)
 
     def post(self, request, *args, **kwargs):
+        logger.info('Received send request')
         tx_code = request.data.get('tx_code')
         to_user = request.data.get('to_user')
-        amount = from_cents(request.data.get('amount'), 7)
+        amount = from_cents(request.data.get('amount'), 8)
         currency = request.data.get('currency')
         issuer = request.data.get('issuer')
 
-        print(request.data)
-        print(currency)
-
+        logger.debug(request.data)
         logger.info('To: ' + to_user)
         logger.info('Amount: ' + str(amount))
         logger.info('Currency: ' + currency)
@@ -157,7 +160,7 @@ class BalanceView(APIView):
 class OperatingAccountView(APIView):
     allowed_methods = ('GET',)
     throttle_classes = (NoThrottling,)
-    permission_classes = (AllowAny, AdapterGlobalPermission,)
+    permission_classes = (AdapterGlobalPermission,)
 
     def post(self, request, *args, **kwargs):
         raise exceptions.MethodNotAllowed('POST')
@@ -165,26 +168,45 @@ class OperatingAccountView(APIView):
     def get(self, request, *args, **kwargs):
         account = AdminAccount.objects.get(default=True)
         interface = Interface(account=account)
-        return Response(interface.get_account_details())
+        account_id = interface.get_account_id()
+
+        # TODO: move this details calculation to interface:
+        payment_uri = 'bitcoin:' + str(account_id)
+        qr_code = create_qr_code_url(payment_uri)
+        details = {'payment_uri': payment_uri,
+                   'qr_code': qr_code}
+
+        return Response(OrderedDict([('account_id', account_id),
+                                     ('details', details)]))
 
 
 class UserAccountView(GenericAPIView):
     allowed_methods = ('POST',)
     throttle_classes = (NoThrottling,)
-    permission_classes = (AllowAny, AdapterGlobalPermission,)
+    permission_classes = (AdapterGlobalPermission,)
     serializer_class = UserAccountSerializer
 
     def post(self, request, *args, **kwargs):
+        logger.info('User account requested.')
         logger.info(request.data)
         user_id = request.data.get('user_id')
         # Check if metadata is specified:
         metadata = input_to_json(request.data.get('metadata'))
-        # Generate Account ID:
-        account_id = Interface.new_account_id(metadata=metadata)
-        # Store Account details:
-        UserAccount.objects.get_or_create(user_id=user_id, account_id=account_id)
+
+        # Get Account ID:
+        user_account, created = UserAccount.objects.get_or_create(rehive_id=user_id)
+        account_id = user_account.account_id
+
+        logger.debug('AccountID: %s' % account_id)
+
+        # TODO: move this details calculation to interface:
+        payment_uri = 'bitcoin:' + str(account_id)
+        qr_code = create_qr_code_url(payment_uri)
+        details = {'payment_uri': payment_uri,
+                   'qr_code': qr_code}
+
         return Response(OrderedDict([('account_id', account_id),
-                                     ('user_id', user_id)]))
+                                    ('details', details)]))
 
     def get(self, request, *args, **kwargs):
         raise exceptions.MethodNotAllowed('GET')
@@ -196,13 +218,20 @@ class WebhookView(APIView):
 
     def post(self, request, *args, **kwargs):
         receive_id = request.GET.get('id', '')
+        hook_name = self.kwargs.get('hook_name')
+        data = request.data
+
+        logger.info('Webhook received')
+        logger.debug(data)
 
         if not receive_id:
             raise Exception('Bad blockcypher post: no receive_id')
 
-        # TODO: process
+        process_webhook_receive(webhook_type=hook_name,
+                                receive_id=receive_id,
+                                data=data)
 
-        return Response({}, status=status.HTTP_200_OK)
+        return Response({}, status=HTTP_200_OK)
 
     def get(self, request, *args, **kwargs):
-        return Response({}, status=status.HTTP_404_NOT_FOUND)
+        return Response({}, status=HTTP_404_NOT_FOUND)

@@ -29,14 +29,15 @@ django-cors-headers
 
 
 django-rest-auth
-stellar_base
 
 pillow
 requests
 markdown
-twilio
 toml
 
 django-countries
 django-timezone-field
 django-ses-backend
+
+bitcoin
+blockcypher

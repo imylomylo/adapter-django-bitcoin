@@ -193,7 +193,7 @@ def upload_config():
 def deploy():
     chown_everything()  # Figure out why /srv/config/ keeps getting changed to root ownership
     upload_app()
-    prepare()
+    # prepare()
     upload_www()
     upload_config()
 

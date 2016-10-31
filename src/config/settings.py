@@ -186,7 +186,7 @@ LOGIN_URL = '/accounts/login'
 
 FIXTURE_DIRS = ['config/fixtures']
 
-SITE_HEADER = 'Wander'
+SITE_HEADER = 'Adapter'
 
 CACHE_DIR = os.path.join(PROJECT_DIR, 'var/cache')
 

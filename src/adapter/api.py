@@ -3,12 +3,12 @@ from logging import getLogger
 import requests
 from django.conf import settings
 
-from src.adapter.models import UserAccount
 from .utils import to_cents
 
 logger = getLogger('django')
 import bitcoin, blockcypher
 from urllib.parse import urlparse, urlencode, urljoin
+from django.contrib.sites.shortcuts import get_current_site
 
 
 class AbstractBaseInteface:
@@ -20,13 +20,13 @@ class AbstractBaseInteface:
         # Always linked to an AdminAccount
         self.account = account
 
-    def get_user_account_id(self, user_id):
+    def get_user_account_id(self):
         """
         Generated or retrieve an account ID from third-party API or cryptocurrency.
         """
         raise NotImplementedError('subclasses of AbstractBaseUser must provide a get_user_account_id() method')
 
-    def get_user_account_details(self, user_id) -> dict:
+    def get_user_account_details(self) -> dict:
         """
         Returns account id and details
         Should return dict of the form:
@@ -36,7 +36,7 @@ class AbstractBaseInteface:
         """
         raise NotImplementedError('subclasses of AbstractBaseUser must provide a get_user_account_id() method')
 
-    def get_account_id(self, user_id):
+    def get_account_id(self):
         """
         Generated or retrieve an account ID from third-party API or cryptocurrency.
         """
@@ -69,7 +69,7 @@ class Interface(AbstractBaseInteface):
         else:
             raise NotImplementedError('Account does not have valid seed')
 
-    def get_user_account_id(self, user_id):
+    def get_user_account_id(self):
         if self.account.secret.get('mpk'):
             mpk = self.account.secret.get('mpk')
             idx = self.account.secret.get('current_index')
@@ -192,15 +192,13 @@ class AbstractReceiveWebhookInterfaceBase:
         raise NotImplementedError('subclasses of AbstractBaseUser must provide a get_account_id() method')
 
 
-BASE_URL = 'http://requestb.in/ueftzyue'
-
-
 class WebhookReceiveInterface(AbstractReceiveWebhookInterfaceBase):
     def blockcypher_receive_unconfirmed(self):
         from .models import ReceiveWebhook
         api_key = settings.BLOCKCYPHER_TOKEN
         # base_url = urljoin(BASE_URL, 'unconfirmed')
-        base_url = BASE_URL
+        request = None
+        base_url = ''.join(['https://', get_current_site(request).domain, '/api/1', '/hooks', '/unconfirmed/'])
 
         # ID is used to keep track of user or tx for which transactions are being monitored:
         params = {'id': self.account.id}
@@ -208,7 +206,7 @@ class WebhookReceiveInterface(AbstractReceiveWebhookInterfaceBase):
 
         url = 'https://api.blockcypher.com/v1/btc/main/hooks'
         params = {
-            'includedConfidence': True
+            'secret': 'secret'  # TODO: set proper secret
         }
 
         data = {'event': 'unconfirmed-tx',
@@ -219,35 +217,37 @@ class WebhookReceiveInterface(AbstractReceiveWebhookInterfaceBase):
         res = requests.post(url, params=params, json=data, verify=True)
         webhook_id = res.json()['id']
 
-        ReceiveWebhook.objects.create(receive_user=self.account,
+        ReceiveWebhook.objects.create(user_account=self.account,
                                       webhook_type='unconfirmed-tx',
                                       webhook_id=webhook_id,
                                       callback_url=callback_url)
 
-    def blockcypher_receive_confirmed(self):
+    def blockcypher_receive_confirmations(self):
         from .models import ReceiveWebhook
         api_key = settings.BLOCKCYPHER_TOKEN
         # TODO: Remove hardcoded SITE_URL
         # base_url = urljoin(BASE_URL, 'unconfirmed')
-        base_url = BASE_URL
+        request = None
+        base_url = ''.join(['https://', get_current_site(request).domain, '/api/1', '/hooks', '/confirmations/'])
         params = {'id': self.account.id}
         callback_url = base_url + ('&', '?')[urlparse(base_url).query == ''] + urlencode(params)
 
         url = 'https://api.blockcypher.com/v1/btc/main/hooks'
         params = {
-            'includedConfidence': True
+            'secret': 'secret'  # TODO: set proper secret
         }
 
-        data = {'event': 'unconfirmed-tx',
+        data = {'event': 'tx-confirmation',
                 'url': callback_url,
                 'address': self.account.account_id,
                 'token': api_key}
 
         res = requests.post(url, params=params, json=data, verify=True)
+        print(res.json())
         webhook_id = res.json()['id']
 
-        ReceiveWebhook.objects.create(receive_use=self.account,
-                                      webhook_type='unconfirmed-tx',
+        ReceiveWebhook.objects.create(user_account=self.account,
+                                      webhook_type='tx-confirmation',
                                       webhook_id=webhook_id,
                                       callback_url=callback_url)
 
@@ -256,8 +256,9 @@ class WebhookReceiveInterface(AbstractReceiveWebhookInterfaceBase):
         api_key = settings.BLOCKCYPHER_TOKEN
         # TODO: Remove hardcoded SITE_URL
         # base_url = urljoin(BASE_URL, 'confirmations')
-        base_url = BASE_URL
-        params = {'id': self.account}
+        request = None
+        base_url = ''.join(['https://', get_current_site(request).domain, '/api/1', '/hooks', '/confidence/'])
+        params = {'id': self.account.id}
         callback_url = base_url + ('&', '?')[urlparse(base_url).query == ''] + urlencode(params)
 
         url = 'https://api.blockcypher.com/v1/btc/main/hooks'
@@ -273,7 +274,7 @@ class WebhookReceiveInterface(AbstractReceiveWebhookInterfaceBase):
         logger.info(res.json())
         logger.info(webhook_id)
 
-        ReceiveWebhook.objects.create(receive_user=self.account,
+        ReceiveWebhook.objects.create(user_account=self.account,
                                       webhook_type='tx-confidence',
                                       webhook_id=webhook_id,
                                       callback_url=callback_url)
@@ -291,8 +292,9 @@ class WebhookReceiveInterface(AbstractReceiveWebhookInterfaceBase):
             return res
 
     def subscribe_to_all(self):
-        self.blockcypher_receive_unconfirmed()
         self.blockcypher_receive_confidence()
+        # The confirmations hook also posts the unconfirmed tx
+        self.blockcypher_receive_confirmations()
 
     def unsubscribe_from_all(self):
         self.unsubscribe_blockcypher('unconfirmed-tx')

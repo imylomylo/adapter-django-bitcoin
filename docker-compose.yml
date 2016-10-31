@@ -6,7 +6,7 @@ webapp:
   links:
     - postgres
   ports:
-    - 8010:8000
+    - 8015:8000
 
 postgres:
   image: postgres
@@ -23,6 +23,14 @@ db_data:
   volumes:
     - /var/lib/postgresql/data
 
+worker_blockcypher:
+  extends:
+     service: webapp
+     file: ./etc/docker-services.yml
+  command: bash -c "celery -A config.celery worker --loglevel=INFO --concurrency=1 -Q blockcypher-${HOST_NAME}"
+  links:
+    - postgres
+
 worker_general:
   extends:
      service: webapp
@@ -31,9 +39,9 @@ worker_general:
   links:
     - postgres
 
-scheduler:
-  extends:
-     service: webapp
-     file: ./etc/docker-services.yml
-  command: bash -c "celery -A config.celery worker --beat --loglevel=INFO --concurrency=1 -Q dummy-queue"
+#scheduler:
+#  extends:
+#     service: webapp
+#     file: ./etc/docker-services.yml
+#  command: bash -c "celery -A config.celery worker --beat --loglevel=INFO --concurrency=1 -Q dummy-queue"
 

@@ -14,6 +14,9 @@ HOST_NAME = os.environ.get('HOST_NAME', 'local')
 default_queue = '-'.join(('general', HOST_NAME))
 CELERY_DEFAULT_QUEUE = default_queue
 
+blockcypher_queue = '-'.join(('blockcypher', HOST_NAME))
+CELERY_ROUTES = {'adapter.tasks.initiate_transaction': {'queue': blockcypher_queue},}
+
 BROKER_TRANSPORT = 'sqs'
 BROKER_TRANSPORT_OPTIONS = {
     'region': 'eu-west-1',

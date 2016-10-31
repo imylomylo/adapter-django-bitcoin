@@ -3,8 +3,10 @@ from logging import getLogger
 from decimal import Decimal
 from django.contrib.postgres.fields import JSONField
 from django.db import models
+from django.db.models.signals import post_save
+from django.dispatch import receiver
 
-from .api import Interface
+from .api import Interface, WebhookReceiveInterface
 
 logger = getLogger('django')
 
@@ -22,7 +24,7 @@ class ReceiveTransaction(models.Model):
     STATUS = (
         ('Waiting', 'Waiting'),
         ('Pending', 'Pending'),
-        ('Complete', 'Complete'),
+        ('Confirmed', 'Confirmed'),
         ('Failed', 'Failed'),
     )
     user_account = models.ForeignKey('adapter.UserAccount')
@@ -44,7 +46,7 @@ class ReceiveTransaction(models.Model):
                 create_rehive_receive(self.id)
         else:
             if self.status == 'Complete':
-                confirm_rehive_transaction(self.id)
+                confirm_rehive_transaction(self.id, tx_type='receive')
 
 
 # Log of all processed sends.
@@ -68,9 +70,13 @@ class SendTransaction(models.Model):
     data = JSONField(null=True, blank=True, default={})
     metadata = JSONField(null=True, blank=True, default={})
 
+    def save(self, *args, **kwargs):
+        if not self.id:  # On create
+            self.admin_account = AdminAccount.objects.get(default=True)
+        return super(SendTransaction, self).save(*args, **kwargs)
+
     def execute(self):
-        account = AdminAccount.objects.get(default=True)
-        account.process_send(self)
+        self.admin_account.send(self)
 
 
 # Accounts for identifying Rehive users.
@@ -84,13 +90,30 @@ class UserAccount(models.Model):
     def save(self, *args, **kwargs):
         if not self.id:  # On create
             logger.info('Fetching account_id.')
-            self.account_id = self._new_account_id()
+            self.admin_account = AdminAccount.objects.get(name='receive_mpk')  # TODO: Make this more generic
+            self._new_account_id()
         return super(UserAccount, self).save(*args, **kwargs)
 
     def _new_account_id(self):
         interface = Interface(account=self.admin_account)
-        return interface.get_user_account_id(user_id=self.rehive_id)
 
+        # Get and save user account ID:
+        self.account_id = interface.get_user_account_id()
+
+        return self.account_id
+
+    def subscribe_to_hooks(self):
+        # Subscribe to webhooks for receive transactions:
+        webhooks = WebhookReceiveInterface(account=self)
+        webhooks.subscribe_to_all()
+
+
+@receiver(post_save, sender=UserAccount, dispatch_uid="subscribe_to_receive_hooks")
+def subscribe_to_receive_hooks(sender, instance, created, **kwargs):
+    # Kwargs raw is used to check if data is loaded from fixtures.
+    if created and not kwargs.get('raw', False):
+        logger.info('Subscribing to webhooks for receive transactions')
+        instance.subscribe_to_hooks()
 
 # HotWallet/ Operational Accounts for sending or receiving on behalf of users.
 # Admin accounts usually have a secret key to authenticate with third-party provider (or XPUB for key generation).
@@ -126,5 +149,5 @@ class AdminAccount(models.Model):
 class ReceiveWebhook(models.Model):
     webhook_type = models.CharField(max_length=50, null=True, blank=True)
     webhook_id = models.CharField(max_length=50, null=True, blank=True)
-    receive_transaction = models.ForeignKey(UserAccount)
+    user_account = models.ForeignKey(UserAccount)
     callback_url = models.CharField(max_length=150, blank=False)

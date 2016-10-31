@@ -41,5 +41,8 @@ REHIVE_API_URL = os.environ.get('REHIVE_API_URL', '')
 REHIVE_API_TOKEN = os.environ.get('REHIVE_API_TOKEN', '')
 
 # TODO: Replace this with user accounts and tokens.
-ADAPTER_SECRET_KEY = os.environ.get('ADAPTER_TOKEN', 'secret')
+ADAPTER_SECRET_KEY = os.environ.get('ADAPTER_SECRET_KEY', 'secret')
 BLOCKCYPHER_TOKEN = os.environ.get('BLOCKCYPHER_TOKEN', '')
+
+# Separate secret as for blockcypher this is passed over http requests as a query parameter.
+BLOCKCYPHER_ADAPTER_SECRET = os.environ.get('BLOCKCYPHER_ADAPTER_SECRET', '')

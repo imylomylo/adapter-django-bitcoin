@@ -8,7 +8,6 @@ logger = getLogger('django')
 # Check that the required secret key matches the secret sent in the authorization headers
 def authenticate(required_secret, request, view):
     secret = request.META.get('HTTP_AUTHORIZATION')
-
     if (not secret) or not (('Secret ' + required_secret) == secret):
        return False
 
@@ -17,5 +16,5 @@ def authenticate(required_secret, request, view):
 
 class AdapterGlobalPermission(permissions.BasePermission):
     def has_permission(self, request, view):
-        return authenticate(getattr(settings, 'ADAPTER_TOKEN'), request, view)
+        return authenticate(getattr(settings, 'ADAPTER_SECRET_KEY'), request, view)
 
