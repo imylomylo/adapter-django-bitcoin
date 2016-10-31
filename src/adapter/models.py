@@ -127,11 +127,13 @@ class AdminAccount(models.Model):
     default = models.BooleanField(default=False)
 
     def send(self, tx: SendTransaction) -> bool:
+        from .tasks import confirm_rehive_transaction
         """
         Initiates a send transaction using the Admin account.
         """
         interface = Interface(account=self)
         interface.send(tx)
+        confirm_rehive_transaction(tx_id=tx.id, tx_type='send')
         return True
 
     # Return account id (e.g. Bitcoin address)
