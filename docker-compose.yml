@@ -16,6 +16,7 @@ postgres:
     - 7654:5432
   env_file:
     - ${PWD}/${ENV_FILE}
+  restart: always
 
 db_data:
   image: postgres

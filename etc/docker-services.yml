@@ -32,3 +32,4 @@ webapp:
   log_opt:
     max-size: "500k"
     max-file: "2"
+  restart: always

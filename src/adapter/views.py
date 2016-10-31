@@ -134,8 +134,9 @@ class SendView(GenericAPIView):
                                             amount=amount,
                                             currency=currency,
                                             issuer=issuer)
+        if tx.currency == 'XBT':
+            tx.execute()
 
-        tx.execute()
         return Response({'status': 'success'})
 
     def get(self, request, *args, **kwargs):
