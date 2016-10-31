@@ -206,7 +206,7 @@ class UserAccountView(GenericAPIView):
                    'qr_code': qr_code}
 
         return Response(OrderedDict([('account_id', account_id),
-                                    ('details', details)]))
+                                     ('details', details)]))
 
     def get(self, request, *args, **kwargs):
         raise exceptions.MethodNotAllowed('GET')
@@ -227,9 +227,9 @@ class WebhookView(APIView):
         if not receive_id:
             raise Exception('Bad blockcypher post: no receive_id')
 
-        process_webhook_receive(webhook_type=hook_name,
-                                receive_id=receive_id,
-                                data=data)
+        process_webhook_receive.delay(webhook_type=hook_name,
+                                      receive_id=receive_id,
+                                      data=data)
 
         return Response({}, status=HTTP_200_OK)
 

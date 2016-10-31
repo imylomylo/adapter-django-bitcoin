@@ -24,7 +24,8 @@ class ReceiveTransaction(models.Model):
     STATUS = (
         ('Waiting', 'Waiting'),
         ('Pending', 'Pending'),
-        ('Confirmed', 'Confirmed'),
+        ('Confirmed', 'Confirmed'),  # Confirmed but not yet uploaded to rehive
+        ('Complete', 'Complete'),  # Confirmed and uploaded to rehive
         ('Failed', 'Failed'),
     )
     user_account = models.ForeignKey('adapter.UserAccount')
@@ -42,11 +43,11 @@ class ReceiveTransaction(models.Model):
     def upload_to_rehive(self):
         from .tasks import create_rehive_receive, confirm_rehive_transaction
         if not self.rehive_code:
-            if self.status in ['Pending', 'Complete']:
-                create_rehive_receive(self.id)
+            if self.status in ['Pending', 'Confirmed']:
+                create_rehive_receive.delay(self.id)
         else:
-            if self.status == 'Complete':
-                confirm_rehive_transaction(self.id, tx_type='receive')
+            if self.status == 'Confirmed':
+                confirm_rehive_transaction.delay(self.id, tx_type='receive')
 
 
 # Log of all processed sends.

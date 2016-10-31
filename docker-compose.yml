@@ -23,11 +23,11 @@ db_data:
   volumes:
     - /var/lib/postgresql/data
 
-worker_blockcypher:
+worker_webhooks:
   extends:
      service: webapp
      file: ./etc/docker-services.yml
-  command: bash -c "celery -A config.celery worker --loglevel=INFO --concurrency=1 -Q blockcypher-${HOST_NAME}"
+  command: bash -c "celery -A config.celery worker --loglevel=INFO --concurrency=1 -Q webhooks-${HOST_NAME}"
   links:
     - postgres
 

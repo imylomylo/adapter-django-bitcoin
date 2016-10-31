@@ -24,19 +24,10 @@ rabbitmq:
 
 webapp:
   image: ${IMAGE_NAME}
-#  build: ${PWD}
-#  ports:
-#    - "8000:8000"
-#  command: /docker-entrypoint.sh gunicorn
-#  links:
-#    - postgres:db
-#    - rabbitmq:rabbit-node
-#    - redis:redis
   user: webapp
   volumes:
     - ${PWD}/src:/app
     - ${PWD}/var:/var
-#    - /srv/apps/default/src:/app
   env_file: ${PWD}/${ENV_FILE}
   log_opt:
     max-size: "500k"

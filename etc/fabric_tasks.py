@@ -175,7 +175,7 @@ def upload_app():
         exclude=(
             '.git', '.gitignore', '__pycache__', '*.pyc', '.DS_Store', 'environment.yml',
             'fabfile.py', 'Makefile', '.idea', 'bower_components', 'node_modules', 'backups',
-            'server.env', '.env.example', 'requirements.txt', 'README.md', 'var'
+            'server.env', '.env.example', 'README.md', 'var'
         ), delete=True)
 
 

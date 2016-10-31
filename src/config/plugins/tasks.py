@@ -1,7 +1,7 @@
 from datetime import timedelta
 import os
 
-CELERY_IMPORTS = ("wander.models",)
+CELERY_IMPORTS = ("adapter.models",)
 
 CELERY_ENABLE_UTC = True
 CELERY_TIMEZONE = "UTC"
@@ -14,8 +14,8 @@ HOST_NAME = os.environ.get('HOST_NAME', 'local')
 default_queue = '-'.join(('general', HOST_NAME))
 CELERY_DEFAULT_QUEUE = default_queue
 
-blockcypher_queue = '-'.join(('blockcypher', HOST_NAME))
-CELERY_ROUTES = {'adapter.tasks.initiate_transaction': {'queue': blockcypher_queue},}
+webhooks_queue = '-'.join(('webhooks', HOST_NAME))
+CELERY_ROUTES = {'adapter.tasks.process_webhook_receive': {'queue': webhooks_queue}, }
 
 BROKER_TRANSPORT = 'sqs'
 BROKER_TRANSPORT_OPTIONS = {

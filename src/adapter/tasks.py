@@ -42,7 +42,7 @@ def confirm_rehive_transaction(self, tx_id: int, tx_type: str):
 
         if r.status_code in (200,201):
             tx.rehive_response = r.json()
-            tx.status = 'Confirmed'
+            tx.status = 'Complete'
             tx.save()
         else:
             logger.info(headers)
@@ -72,7 +72,8 @@ def create_rehive_receive(self, tx_id: int):
                                 'amount': to_cents(tx.amount, 8),
                                 'currency': tx.currency,
                                 'issuer': tx.issuer,
-                                'metadata': tx.metadata},
+                                'metadata': tx.metadata,
+                                'from_reference': tx.external_id},
                           headers=headers)
 
         if r.status_code in (200, 201):
@@ -128,16 +129,24 @@ def process_webhook_receive(webhook_type, receive_id, data):
             tx.upload_to_rehive()
 
         elif data['confirmations'] > 1:  # TODO: Make this customizable
-            logger.info('More than 1 confirmation, confirming transaction')
+            logger.info('More than 1 confirmation')
             tx = ReceiveTransaction.objects.get(external_id=data['hash'])
-            tx.status = 'Complete'
-            tx.upload_to_rehive()
+            if tx.status not in ('Confirmed', 'Complete', 'Failed'):
+                logger.info('Confirming transaction')
+                tx.data = data
+                tx.status = 'Confirmed'
+                tx.save()
+                tx.upload_to_rehive()
 
     elif webhook_type == 'confidence':
         logger.info('Confidence webhook')
         if data['confidence'] > 0.9:  # TODO: Make this customizable
-            logger.info('Greater than 90% confidence, confirming transaction')
+            logger.info('Greater than 90% confidence')
             #  TODO: Check if this is 'malleability' proof:
             tx = ReceiveTransaction.objects.get(external_id=data['hash'])
-            tx.status = 'Complete'
-            tx.upload_to_rehive()
+            if tx.status not in ('Confirmed', 'Complete', 'Failed'):
+                logger.info('Confirming transaction')
+                tx.data = data
+                tx.status = 'Confirmed'
+                tx.save()
+                tx.upload_to_rehive()
