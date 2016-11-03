@@ -42,6 +42,7 @@ class ReceiveTransaction(models.Model):
 
     def upload_to_rehive(self):
         from .tasks import create_rehive_receive, confirm_rehive_transaction
+        self.refresh_from_db()
         if not self.rehive_code:
             if self.status in ['Pending', 'Confirmed']:
                 create_rehive_receive.delay(self.id)
