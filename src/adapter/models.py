@@ -41,14 +41,14 @@ class ReceiveTransaction(models.Model):
     metadata = JSONField(null=True, blank=True, default={})
 
     def upload_to_rehive(self):
-        from .tasks import create_rehive_receive, confirm_rehive_transaction
+        from .tasks import create_or_confirm_rehive_receive
         self.refresh_from_db()
         if not self.rehive_code:
-            if self.status in ['Pending', 'Confirmed']:
-                create_rehive_receive.delay(self.id)
+            if self.status == 'Pending':
+                create_or_confirm_rehive_receive.delay(self.id, confirm=False)
         else:
             if self.status == 'Confirmed':
-                confirm_rehive_transaction.delay(self.id, tx_type='receive')
+                create_or_confirm_rehive_receive.delay(self.id, confirm=True)
 
 
 # Log of all processed sends.

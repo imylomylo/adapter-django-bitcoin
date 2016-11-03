@@ -59,41 +59,75 @@ def confirm_rehive_transaction(self, tx_id: int, tx_type: str):
             logger.info('Final transaction update request failure due to connection error.')
 
 
-@shared_task(bind=True, name='adapter.create_rehive_receive.task', max_retries=24, default_retry_delay=60 * 60)
-def create_rehive_receive(self, tx_id: int):
+@shared_task(bind=True, name='adapter.create_or_confirm_rehive_receive.task', max_retries=24, default_retry_delay=60 * 60)
+def create_or_confirm_rehive_receive(self, tx_id: int, confirm: bool=False):
     tx = ReceiveTransaction.objects.get(id=tx_id)
-    url = getattr(settings, 'REHIVE_API_URL') + '/admins/transactions/receive/'
-    headers = {'Authorization': 'Token ' + getattr(settings, 'REHIVE_API_TOKEN')}
+    # If transaction has not yet been created, create it:
+    if not tx.rehive_code:
+        url = getattr(settings, 'REHIVE_API_URL') + '/admins/transactions/receive/'
+        headers = {'Authorization': 'Token ' + getattr(settings, 'REHIVE_API_TOKEN')}
 
-    try:
-        # Make request:
-        r = requests.post(url,
-                          json={'recipient': tx.user_account.rehive_id,
-                                'amount': to_cents(tx.amount, 8),
-                                'currency': tx.currency,
-                                'issuer': tx.issuer,
-                                'metadata': tx.metadata,
-                                'from_reference': tx.external_id},
-                          headers=headers)
-
-        if r.status_code in (200, 201):
-            tx.rehive_response = r.json()
-            tx.rehive_code = tx.rehive_response['data']['tx_code']
-            tx.status = 'Pending'
-            tx.save()
-        else:
-            logger.info(headers)
-            logger.info('Failed transaction update request: HTTP %s Error: %s' % (r.status_code, r.text))
-            tx.status = 'Failed'
-            tx.rehive_response = {'status': r.status_code, 'data': r.text}
-            tx.save()
-
-    except (requests.exceptions.RequestException, requests.exceptions.MissingSchema) as e:
         try:
-            logger.info('Retry transaction update request due to connection error.')
-            self.retry(countdown=5 * 60, exc=PlatformRequestFailedError)
-        except PlatformRequestFailedError:
-            logger.info('Final transaction update request failure due to connection error.')
+            # Make request:
+            r = requests.post(url,
+                              json={'recipient': tx.user_account.rehive_id,
+                                    'amount': to_cents(tx.amount, 8),
+                                    'currency': tx.currency,
+                                    'issuer': tx.issuer,
+                                    'metadata': tx.metadata,
+                                    'from_reference': tx.external_id},
+                              headers=headers)
+
+            if r.status_code in (200, 201):
+                tx.rehive_response = r.json()
+                tx.rehive_code = tx.rehive_response['data']['tx_code']
+                tx.status = 'Pending'
+                tx.save()
+            else:
+                logger.info(headers)
+                logger.info('Failed transaction update request: HTTP %s Error: %s' % (r.status_code, r.text))
+                tx.status = 'Failed'
+                tx.rehive_response = {'status': r.status_code, 'data': r.text}
+                tx.save()
+
+        except (requests.exceptions.RequestException, requests.exceptions.MissingSchema) as e:
+            try:
+                logger.info('Retry transaction update request due to connection error.')
+                self.retry(countdown=5 * 60, exc=PlatformRequestFailedError)
+            except PlatformRequestFailedError:
+                logger.info('Final transaction update request failure due to connection error.')
+
+    # After creation, or if tx already exists, confirm it if necessary
+    if confirm:
+        logger.info('Transaction update request.')
+
+        # Update URL
+        url = getattr(settings, 'REHIVE_API_URL') + '/admins/transactions/update/'
+
+        # Add Authorization headers
+        headers = {'Authorization': 'Token ' + getattr(settings, 'REHIVE_API_TOKEN')}
+
+        try:
+            # Make request
+            r = requests.post(url, json={'tx_code': tx.rehive_code, 'status': 'Confirmed'}, headers=headers)
+
+            if r.status_code in (200, 201):
+                tx.rehive_response = r.json()
+                tx.status = 'Complete'
+                tx.save()
+            else:
+                logger.info(headers)
+                logger.info('Failed transaction update request: HTTP %s Error: %s' % (r.status_code, r.text))
+                tx.rehive_response = {'status': r.status_code, 'data': r.text}
+                tx.status = 'Failed'
+                tx.save()
+
+        except (requests.exceptions.RequestException, requests.exceptions.MissingSchema) as e:
+            try:
+                logger.info('Retry transaction update request due to connection error.')
+                self.retry(countdown=5 * 60, exc=PlatformRequestFailedError)
+            except PlatformRequestFailedError:
+                logger.info('Final transaction update request failure due to connection error.')
 
 
 @shared_task()
@@ -103,6 +137,7 @@ def process_webhook_receive(webhook_type, receive_id, data):
 
     if webhook_type == 'confirmations':
         logger.info('Confirmations webhook')
+        logger.info('Transaction: %s' % data['hash'])
         # TODO: Check if this is 'malleability' proof:
         if data['confirmations'] == 0:
             logger.info('Zero Confirmations')

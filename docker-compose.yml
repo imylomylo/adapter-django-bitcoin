@@ -40,6 +40,14 @@ worker_general:
   links:
     - postgres
 
+worker_rehive_uploads:
+  extends:
+     service: webapp
+     file: ./etc/docker-services.yml
+  command: bash -c "celery -A config.celery worker --loglevel=INFO --concurrency=1 -Q general-adapter-${HOST_NAME}"
+  links:
+    - postgres
+
 #scheduler:
 #  extends:
 #     service: webapp
