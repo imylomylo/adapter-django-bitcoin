@@ -128,7 +128,7 @@ def process_webhook_receive(webhook_type, receive_id, data):
 
             tx.upload_to_rehive()
 
-        elif data['confirmations'] > 1:  # TODO: Make this customizable
+        elif data['confirmations'] >= 1:  # TODO: Make this customizable
             logger.info('More than 1 confirmation')
             tx = ReceiveTransaction.objects.get(external_id=data['hash'])
             if tx.status not in ('Confirmed', 'Complete', 'Failed'):
