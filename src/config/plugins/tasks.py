@@ -11,7 +11,7 @@ CELERY_PREFETCH_MULTIPLIER = 1
 
 HOST_NAME = os.environ.get('HOST_NAME', 'local')
 
-default_queue = '-'.join(('general', HOST_NAME))
+default_queue = '-'.join(('general-adapter', HOST_NAME))
 CELERY_DEFAULT_QUEUE = default_queue
 
 webhooks_queue = '-'.join(('webhooks', HOST_NAME))

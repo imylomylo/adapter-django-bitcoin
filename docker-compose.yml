@@ -36,7 +36,7 @@ worker_general:
   extends:
      service: webapp
      file: ./etc/docker-services.yml
-  command: bash -c "celery -A config.celery worker --loglevel=INFO --concurrency=4 -Q general-${HOST_NAME}"
+  command: bash -c "celery -A config.celery worker --loglevel=INFO --concurrency=4 -Q general-adapter-${HOST_NAME}"
   links:
     - postgres
 
